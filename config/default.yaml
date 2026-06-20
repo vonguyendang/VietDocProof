@@ -1,0 +1,14 @@
+model:
+  name: "bmd1905/vietnamese-correction-v2"
+  max_length: 256
+  batch_size: 4
+
+confidence:
+  safe_threshold: 0.90
+  review_threshold: 0.70
+  aggressive_threshold: 0.50
+
+engine:
+  mode: "safe" # safe, review, aggressive
+  track_changes: false
+  highlight_fallback: true

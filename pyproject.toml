@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vietdocproof"
+version = "0.1.0"
+description = "A tool to automatically correct Vietnamese text in .docx files while preserving formatting."
+authors = [{name = "Antigravity", email = "ai@example.com"}]
+dependencies = [
+    "python-docx",
+    "transformers",
+    "torch",
+    "pandas",
+    "lxml",
+    "pyyaml"
+]
+
+[tool.setuptools]
+packages = ["core", "utils"]
