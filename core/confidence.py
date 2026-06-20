@@ -31,9 +31,22 @@ class ConfidenceScorer:
             score -= min(0.3, len_diff * 0.02)
             
         # Heavily penalize if the model DELETED words (hallucinated missing words)
-        if len(corrected.split()) < len(original.split()):
+        orig_words = original.split()
+        corr_words = corrected.split()
+        if len(corr_words) < len(orig_words):
             score -= 0.5
             
+        # Do not auto-correct capitalized words in the middle of sentences (Proper Nouns, Names)
+        if len(orig_words) == len(corr_words):
+            import re
+            for i, (ow, cw) in enumerate(zip(orig_words, corr_words)):
+                if i > 0 and ow != cw:
+                    alpha_match = re.search(r'[a-zA-ZáàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]', ow)
+                    if alpha_match and alpha_match.group(0).isupper():
+                        # First letter is uppercase -> it's a Proper Noun
+                        score -= 0.5
+                        break
+                        
         # Penalize heavily for hallucinating or dropping quotes/brackets
         paired_chars = ['"', "'", '(', ')', '[', ']', '{', '}', '“', '”', '‘', '’']
         for char in paired_chars:
