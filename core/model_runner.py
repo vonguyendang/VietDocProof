@@ -143,26 +143,36 @@ class ModelRunner:
         return corr_s_stripped + orig_tail
 
     def _restore_capitalization(self, original, corrected):
-        """Forces the corrected text to strictly adopt the original text's capitalization (both upper and lower)."""
+        """Forces the first letter of each word in the corrected text to strictly match the case of the original text's first letters."""
         import difflib
+        
+        def get_first_letters(text):
+            indices = set()
+            is_in_word = False
+            for i, c in enumerate(text):
+                if c.isalpha():
+                    if not is_in_word:
+                        indices.add(i)
+                        is_in_word = True
+                else:
+                    is_in_word = False
+            return indices
+            
+        orig_firsts = get_first_letters(original)
+        corr_firsts = get_first_letters(corrected)
+        
         # Match ignoring case so we align correctly even if only case changed
         matcher = difflib.SequenceMatcher(None, original.lower(), corrected.lower())
         result = list(corrected)
         
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-            if tag == 'equal':
+            if tag in ('equal', 'replace'):
                 for orig_idx, corr_idx in zip(range(i1, i2), range(j1, j2)):
-                    if original[orig_idx].isupper():
-                        result[corr_idx] = result[corr_idx].upper()
-                    elif original[orig_idx].islower():
-                        result[corr_idx] = result[corr_idx].lower()
-            elif tag == 'replace':
-                if i1 < i2 and j1 < j2:
-                    # Sync the case of the first character of the replaced chunk
-                    if original[i1].isupper():
-                        result[j1] = result[j1].upper()
-                    elif original[i1].islower():
-                        result[j1] = result[j1].lower()
+                    if orig_idx in orig_firsts and corr_idx in corr_firsts:
+                        if original[orig_idx].isupper():
+                            result[corr_idx] = result[corr_idx].upper()
+                        elif original[orig_idx].islower():
+                            result[corr_idx] = result[corr_idx].lower()
                         
         return "".join(result)
 
