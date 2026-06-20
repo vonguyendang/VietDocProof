@@ -30,6 +30,10 @@ class ConfidenceScorer:
         if len_diff > 5:
             score -= min(0.3, len_diff * 0.02)
             
+        # Heavily penalize if the model DELETED words (hallucinated missing words)
+        if len(corrected.split()) < len(original.split()):
+            score -= 0.5
+            
         # Penalize heavily for hallucinating or dropping quotes/brackets
         paired_chars = ['"', "'", '(', ')', '[', ']', '{', '}', '“', '”', '‘', '’']
         for char in paired_chars:

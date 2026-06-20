@@ -97,6 +97,9 @@ class ModelRunner:
                 # Fix hallucinated periods on headings/short phrases
                 pred_text = self._align_trailing_punctuation(orig_text, pred_text)
                 
+                # Restore user's capitalization
+                pred_text = self._restore_capitalization(orig_text, pred_text)
+                
                 # Cache the plain string
                 self.cache[orig_text] = pred_text
                 
@@ -138,6 +141,26 @@ class ModelRunner:
         
         # Enforce the original punctuation
         return corr_s_stripped + orig_tail
+
+    def _restore_capitalization(self, original, corrected):
+        """Prevents the AI from lowercasing words that the user explicitly capitalized."""
+        import difflib
+        # Match ignoring case so we align correctly even if only case changed
+        matcher = difflib.SequenceMatcher(None, original.lower(), corrected.lower())
+        result = list(corrected)
+        
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == 'equal':
+                for orig_idx, corr_idx in zip(range(i1, i2), range(j1, j2)):
+                    if original[orig_idx].isupper():
+                        result[corr_idx] = result[corr_idx].upper()
+            elif tag == 'replace':
+                if i1 < i2 and j1 < j2:
+                    # If the first character of the replaced chunk was uppercase, make the new chunk uppercase
+                    if original[i1].isupper():
+                        result[j1] = result[j1].upper()
+                        
+        return "".join(result)
 
     def _restore_whitespace(self, original, generated):
         """Restores leading and trailing whitespace from the original text."""
