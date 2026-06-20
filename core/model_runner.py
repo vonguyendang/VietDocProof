@@ -51,7 +51,11 @@ class ModelRunner:
         
         bullets_map = {}
         
+        import unicodedata
+        
         for i, text in enumerate(texts):
+            # Enforce NFC to prevent HuggingFace tokenizer from dropping decomposed unicode words!
+            text = unicodedata.normalize('NFC', text)
             stripped_text = text.strip()
             
             # Extract bullet points like *, +, -, >, • to protect them

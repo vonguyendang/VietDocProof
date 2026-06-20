@@ -82,13 +82,13 @@ def process_document(input_path, output_path, config, runner, logger=None):
                             ansi_str += e['corr_text']
                             md_str += e['corr_text']
                         elif e['type'] == 'replace':
-                            ansi_str += f"\033[91m{e['corr_text']}\033[0m"
+                            ansi_str += f"\033[9m\033[91m{e['orig_text']}\033[0m \033[1m\033[91m{e['corr_text']}\033[0m"
                             md_str += f"~~{e['orig_text']}~~ **{e['corr_text']}**"
                         elif e['type'] == 'delete':
-                            # Don't show deletions in the terminal corrected string to avoid clutter
+                            ansi_str += f"\033[9m\033[91m{e['orig_text']}\033[0m"
                             md_str += f"~~{e['orig_text']}~~"
                         elif e['type'] == 'insert':
-                            ansi_str += f"\033[91m{e['corr_text']}\033[0m"
+                            ansi_str += f"\033[1m\033[91m{e['corr_text']}\033[0m"
                             md_str += f"**{e['corr_text']}**"
                             
                     import sys
