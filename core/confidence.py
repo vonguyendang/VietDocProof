@@ -36,17 +36,6 @@ class ConfidenceScorer:
         if len(corr_words) < len(orig_words):
             score -= 0.5
             
-        # Do not auto-correct capitalized words in the middle of sentences (Proper Nouns, Names)
-        if len(orig_words) == len(corr_words):
-            import re
-            for i, (ow, cw) in enumerate(zip(orig_words, corr_words)):
-                if i > 0 and ow != cw:
-                    alpha_match = re.search(r'[a-zA-ZáàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ]', ow)
-                    if alpha_match and alpha_match.group(0).isupper():
-                        # First letter is uppercase -> it's a Proper Noun
-                        score -= 0.5
-                        break
-                        
         # Penalize heavily for hallucinating or dropping quotes/brackets
         paired_chars = ['"', "'", '(', ')', '[', ']', '{', '}', '“', '”', '‘', '’']
         for char in paired_chars:

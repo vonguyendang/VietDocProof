@@ -143,7 +143,7 @@ class ModelRunner:
         return corr_s_stripped + orig_tail
 
     def _restore_capitalization(self, original, corrected):
-        """Prevents the AI from lowercasing words that the user explicitly capitalized."""
+        """Forces the corrected text to strictly adopt the original text's capitalization (both upper and lower)."""
         import difflib
         # Match ignoring case so we align correctly even if only case changed
         matcher = difflib.SequenceMatcher(None, original.lower(), corrected.lower())
@@ -154,11 +154,15 @@ class ModelRunner:
                 for orig_idx, corr_idx in zip(range(i1, i2), range(j1, j2)):
                     if original[orig_idx].isupper():
                         result[corr_idx] = result[corr_idx].upper()
+                    elif original[orig_idx].islower():
+                        result[corr_idx] = result[corr_idx].lower()
             elif tag == 'replace':
                 if i1 < i2 and j1 < j2:
-                    # If the first character of the replaced chunk was uppercase, make the new chunk uppercase
+                    # Sync the case of the first character of the replaced chunk
                     if original[i1].isupper():
                         result[j1] = result[j1].upper()
+                    elif original[i1].islower():
+                        result[j1] = result[j1].lower()
                         
         return "".join(result)
 
