@@ -112,6 +112,12 @@ def process_document(input_path, output_path, config, runner, logger=None):
     # Save cache at the end
     runner.save_cache()
             
+    # Clean up excessive empty paragraphs (double Enters)
+    removed_empty_lines = reader.clean_empty_paragraphs()
+    if removed_empty_lines > 0:
+        logger.info(f"Removed {removed_empty_lines} consecutive empty paragraphs.")
+        yield f"🧹 Tự động dọn dẹp {removed_empty_lines} dòng Enter trắng thừa thãi."
+
     # Save the output
     reader.save(output_path)
     

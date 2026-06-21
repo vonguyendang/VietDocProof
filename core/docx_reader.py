@@ -32,5 +32,29 @@ class DocxReader:
                         yield index, "table", para, RunMapper(para)
                         index += 1
 
+    def clean_empty_paragraphs(self):
+        """
+        Removes consecutive empty paragraphs in the body to reduce multiple Enters to just one.
+        Returns the number of removed paragraphs.
+        """
+        consecutive_empty = 0
+        removed_count = 0
+        
+        # We only clean up the main body, tables usually have specific formatting
+        for para in self.doc.paragraphs:
+            if not para.text.strip():
+                consecutive_empty += 1
+                if consecutive_empty >= 2:
+                    # Delete the paragraph element safely
+                    p = para._element
+                    if p.getparent() is not None:
+                        p.getparent().remove(p)
+                        para._p = para._element = None
+                    removed_count += 1
+            else:
+                consecutive_empty = 0
+                
+        return removed_count
+
     def save(self, output_path):
         self.doc.save(output_path)
