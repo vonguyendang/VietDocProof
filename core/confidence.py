@@ -21,9 +21,22 @@ class ConfidenceScorer:
             
         score = 1.0
         
-        # Penalize based on number of changes
+        orig_words = original.split()
+        corr_words = corrected.split()
+        
+        # Penalize based on number of changes, normalized by length
+        # A single word might have multiple 'replace' edits due to SequenceMatcher chunking
         num_changes = sum(1 for e in edits if e['type'] != 'equal')
-        score -= (num_changes * 0.05)
+        word_count = max(1, len(orig_words))
+        
+        # If the edits are purely spelling/diacritics, we shouldn't penalize much
+        if set(categories).issubset({'spelling_or_diacritics_fix', 'whitespace_fix', 'punctuation_fix'}):
+            # Only penalize slightly for each fix to avoid dropping below safe threshold for valid long sentences
+            score -= min(0.1, num_changes * 0.01)
+        else:
+            # Normal penalty
+            change_ratio = num_changes / word_count
+            score -= min(0.3, change_ratio * 0.3)
         
         # Penalize if string length changed drastically
         len_diff = abs(len(original) - len(corrected))
@@ -31,8 +44,6 @@ class ConfidenceScorer:
             score -= min(0.3, len_diff * 0.02)
             
         # Heavily penalize if the model DELETED words (hallucinated missing words)
-        orig_words = original.split()
-        corr_words = corrected.split()
         if len(corr_words) < len(orig_words):
             score -= 0.5
             
