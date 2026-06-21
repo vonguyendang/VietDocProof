@@ -30,9 +30,9 @@ class ModelRunner:
             device = "cpu"
         
         try:
-            # We use text2text-generation for this model
+            # Let transformers auto-detect the task based on the model's config
             print(f"Initializing pipeline on device: {device} (batch_size: {self.batch_size})")
-            self.pipeline = pipeline("text2text-generation", model=model_name, device=device)
+            self.pipeline = pipeline(model=model_name, device=device)
         except Exception as e:
             raise RuntimeError(f"Failed to load model {model_name}: {e}")
 
