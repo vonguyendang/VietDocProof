@@ -122,7 +122,7 @@ with gr.Blocks(title="VietDocProof Wizard", theme=gr.themes.Soft(primary_hue="bl
         # Nửa bên phải: Log Terminal
         with gr.Column(scale=1):
             gr.Markdown("### 🤖 TIẾN TRÌNH")
-            log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=22)
+            log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=60)
             
     submit_btn.click(
         fn=process_file_ui,
