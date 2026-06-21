@@ -30,9 +30,11 @@ class ModelRunner:
             device = "cpu"
         
         try:
-            # Let transformers auto-detect the task based on the model's config
-            print(f"Initializing pipeline on device: {device} (batch_size: {self.batch_size})")
-            self.pipeline = pipeline(model=model_name, device=device)
+            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+            print(f"Loading tokenizer and model: {model_name} on {device} (batch_size: {self.batch_size})")
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device)
+            self.device = device
         except Exception as e:
             raise RuntimeError(f"Failed to load model {model_name}: {e}")
 
@@ -85,13 +87,16 @@ class ModelRunner:
             
         # Run inference in batches
         try:
-            # HuggingFace pipeline handles batching internally if passed as a list
-            # We also set max_new_tokens to prevent truncation issues
-            # We enforce num_beams=1 (greedy decoding) which is 4-5x faster than default beam search
-            predictions = self.pipeline(to_process_texts, max_new_tokens=self.max_length, batch_size=self.batch_size, num_beams=1)
+            # Process in explicit batches since we bypassed pipeline
+            predictions = []
+            for i in range(0, len(to_process_texts), self.batch_size):
+                batch = to_process_texts[i:i + self.batch_size]
+                inputs = self.tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=self.max_length).to(self.device)
+                outputs = self.model.generate(**inputs, max_new_tokens=self.max_length, num_beams=1)
+                decoded = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+                predictions.extend(decoded)
             
-            for idx, pred_dict in zip(to_process_indices, predictions):
-                pred_text = pred_dict['generated_text']
+            for idx, pred_text in zip(to_process_indices, predictions):
                 orig_text = to_process_texts[to_process_indices.index(idx)]
                 
                 # Fix hallucinated periods on headings/short phrases
