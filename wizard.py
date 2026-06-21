@@ -86,29 +86,38 @@ with gr.Blocks(title="VietDocProof Wizard", theme=gr.themes.Soft(primary_hue="bl
     gr.Markdown("Trợ lý AI tự động đọc và sửa lỗi chính tả, lỗi dấu câu tiếng Việt cho tài liệu Word mà **không làm mất định dạng (format)** gốc.")
     
     with gr.Row():
-        with gr.Column():
-            file_input = gr.File(label="Kéo thả file .docx vào đây", file_types=[".docx"])
+        with gr.Column(scale=1):
+            file_input = gr.File(label="1. Kéo thả file .docx vào đây", file_types=[".docx"])
             
+        with gr.Column(scale=1):
             mode_radio = gr.Radio(
                 choices=["safe", "review", "aggressive"], 
                 value="safe", 
-                label="Chế độ sửa lỗi",
-                info="Safe: Chỉ sửa lỗi chắc chắn | Review: Đánh dấu thêm các lỗi nghi ngờ | Aggressive: Sửa mạnh tay"
+                label="2. Tùy chỉnh chế độ sửa lỗi",
+                info="Safe: Sửa lỗi chắc chắn | Review: Thêm các lỗi nghi ngờ | Aggressive: Sửa mạnh tay"
             )
             
             highlight_check = gr.Checkbox(
                 value=True, 
-                label="Bôi đỏ các từ đã sửa (Highlight Fallback)",
-                info="Đổi màu chữ các từ được AI sửa thành màu đỏ để dễ dàng kiểm tra lại trong Word."
+                label="Bôi đỏ các từ đã sửa để dễ theo dõi",
             )
             
-            submit_btn = gr.Button("🚀 Bắt đầu sửa lỗi", variant="primary")
+            submit_btn = gr.Button("🚀 3. Bắt đầu sửa lỗi", variant="primary", size="lg")
             
-        with gr.Column():
-            file_output = gr.File(label="Tải xuống file đã sửa (.docx)")
-            report_html = gr.File(label="Tải xuống báo cáo chi tiết (.html)")
+    gr.Markdown("---")
+    gr.Markdown("## KẾT QUẢ")
+    
+    with gr.Row():
+        with gr.Column(scale=1):
             summary_output = gr.Markdown("Chưa có dữ liệu thống kê.")
-            log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=30)
+            
+        with gr.Column(scale=1):
+            with gr.Row():
+                file_output = gr.File(label="Tải xuống file đã sửa (.docx)")
+                report_html = gr.File(label="Tải xuống báo cáo chi tiết (.html)")
+                
+    with gr.Row():
+        log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=15)
             
     submit_btn.click(
         fn=process_file_ui,
