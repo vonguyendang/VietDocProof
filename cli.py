@@ -54,7 +54,11 @@ def main():
     runner = ModelRunner(model_name=config['model']['name'], max_length=config['model']['max_length'], batch_size=config['model']['batch_size'])
     
     if input_path.is_file():
-        for _ in process_document(input_path, output_path, config, runner, logger): pass
+        if output_path.is_dir():
+            actual_output_path = output_path / input_path.name
+        else:
+            actual_output_path = output_path
+        for _ in process_document(input_path, actual_output_path, config, runner, logger): pass
     else:
         # Batch processing
         for doc_file in input_path.glob("*.docx"):
