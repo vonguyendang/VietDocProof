@@ -86,10 +86,11 @@ with gr.Blocks(title="VietDocProof Wizard", theme=gr.themes.Soft(primary_hue="bl
     gr.Markdown("Trợ lý AI tự động đọc và sửa lỗi chính tả, lỗi dấu câu tiếng Việt cho tài liệu Word mà **không làm mất định dạng (format)** gốc.")
     
     with gr.Row():
+        # Nửa bên trái: Thao tác và Kết quả
         with gr.Column(scale=1):
+            gr.Markdown("### 🛠 THAO TÁC")
             file_input = gr.File(label="1. Kéo thả file .docx vào đây", file_types=[".docx"])
             
-        with gr.Column(scale=1):
             mode_radio = gr.Radio(
                 choices=["safe", "review", "aggressive"], 
                 value="safe", 
@@ -104,20 +105,17 @@ with gr.Blocks(title="VietDocProof Wizard", theme=gr.themes.Soft(primary_hue="bl
             
             submit_btn = gr.Button("🚀 3. Bắt đầu sửa lỗi", variant="primary", size="lg")
             
-    gr.Markdown("---")
-    gr.Markdown("## KẾT QUẢ")
-    
-    with gr.Row():
-        with gr.Column(scale=1):
+            gr.Markdown("---")
+            gr.Markdown("### 📥 KẾT QUẢ")
             summary_output = gr.Markdown("Chưa có dữ liệu thống kê.")
             
-        with gr.Column(scale=1):
             with gr.Row():
                 file_output = gr.File(label="Tải xuống file đã sửa (.docx)")
                 report_html = gr.File(label="Tải xuống báo cáo chi tiết (.html)")
                 
-    with gr.Row():
-        log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=40)
+        # Nửa bên phải: Log Terminal
+        with gr.Column(scale=1):
+            log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=40)
             
     submit_btn.click(
         fn=process_file_ui,
