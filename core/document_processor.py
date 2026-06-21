@@ -31,10 +31,14 @@ def process_document(input_path, output_path, config, runner, logger=None):
     
     paragraphs_to_process = list(reader.extract_paragraphs())
     
+    import re
     for idx, section_name, para, mapper in tqdm(paragraphs_to_process, desc="Scanning Paragraphs"):
         stats.add_paragraph()
         text = mapper.text
         if not text.strip(): continue
+        
+        # Auto clean up double spaces (replace 2 or more spaces with 1 space)
+        text = re.sub(r' {2,}', ' ', text)
         
         chunks = segmenter.segment(text)
         chunk_texts = [c[0] for c in chunks]
