@@ -23,13 +23,13 @@ logger = setup_logging()
 
 def process_file_ui(file_obj, mode, highlight):
     if file_obj is None:
-        yield gr.update(), "Vui lòng tải lên một file .docx", gr.update()
+        yield gr.update(), "Vui lòng tải lên một file .docx", gr.update(), gr.update()
         return
         
     input_path = Path(file_obj.name)
     
     if not input_path.name.endswith(".docx"):
-        yield gr.update(), "Chỉ hỗ trợ file Word định dạng .docx", gr.update()
+        yield gr.update(), "Chỉ hỗ trợ file Word định dạng .docx", gr.update(), gr.update()
         return
         
     # Create temp directory for outputs
@@ -42,15 +42,17 @@ def process_file_ui(file_obj, mode, highlight):
     current_config['engine']['highlight_fallback'] = highlight
     
     try:
-        logs = ""
+        logs = []
+        display_logs = ""
         for log_msg in process_document(input_path, output_path, current_config, runner, logger):
             if log_msg:
-                # Add to top of logs
-                logs = f"{log_msg}\n{logs}"
-                # Keep logs reasonably sized to prevent browser lag
-                if len(logs) > 5000:
-                    logs = logs[:5000] + "\n... (đã ẩn bớt log cũ)"
-                yield gr.update(), logs, gr.update()
+                logs.append(log_msg)
+                # Keep last 200 lines to prevent browser lag but maintain history
+                if len(logs) > 200:
+                    logs = logs[-200:]
+                
+                display_logs = "\n".join(logs)
+                yield gr.update(), "⏳ **Đang phân tích và sửa lỗi...**", gr.update(), display_logs
         
         # Read the report summary
         report_json_path = temp_dir / "report.json"
@@ -72,11 +74,11 @@ def process_file_ui(file_obj, mode, highlight):
         report_html_path = temp_dir / "report.html"
         html_out = str(report_html_path) if report_html_path.exists() else None
             
-        yield str(output_path), summary + "\n\n### Lịch sử sửa lỗi:\n" + logs, html_out
+        yield str(output_path), summary, html_out, display_logs
     except Exception as e:
         import traceback
         error_msg = f"Đã xảy ra lỗi trong quá trình xử lý:\n{str(e)}\n\n{traceback.format_exc()}"
-        yield gr.update(), error_msg, gr.update()
+        yield gr.update(), "❌ **Lỗi xử lý**", gr.update(), error_msg
 
 # Build Gradio Interface
 with gr.Blocks(title="VietDocProof Wizard", theme=gr.themes.Soft(primary_hue="blue")) as demo:
@@ -106,11 +108,12 @@ with gr.Blocks(title="VietDocProof Wizard", theme=gr.themes.Soft(primary_hue="bl
             file_output = gr.File(label="Tải xuống file đã sửa (.docx)")
             report_html = gr.File(label="Tải xuống báo cáo chi tiết (.html)")
             summary_output = gr.Markdown("Chưa có dữ liệu thống kê.")
+            log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False)
             
     submit_btn.click(
         fn=process_file_ui,
         inputs=[file_input, mode_radio, highlight_check],
-        outputs=[file_output, summary_output, report_html]
+        outputs=[file_output, summary_output, report_html, log_output]
     )
 
 if __name__ == "__main__":
