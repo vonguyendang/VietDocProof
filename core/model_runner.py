@@ -148,37 +148,109 @@ class ModelRunner:
         return corr_s_stripped + orig_tail
 
     def _restore_capitalization(self, original, corrected):
-        """Forces the first letter of each word in the corrected text to strictly match the case of the original text's first letters."""
+        """Forces the first letter of each word in the corrected text to strictly match the case of the original text's first letters,
+           and forces the entire word to be ALL CAPS if the original word was ALL CAPS."""
+        if original.isupper():
+            return corrected.upper()
+        if original.islower():
+            return corrected.lower()
+            
         import difflib
         
-        def get_first_letters(text):
-            indices = set()
+        def get_word_info(text):
+            firsts = set()
+            bounds = []
             is_in_word = False
+            start = 0
             for i, c in enumerate(text):
                 if c.isalpha():
                     if not is_in_word:
-                        indices.add(i)
+                        firsts.add(i)
+                        start = i
                         is_in_word = True
                 else:
-                    is_in_word = False
-            return indices
+                    if is_in_word:
+                        bounds.append((start, i))
+                        is_in_word = False
+            if is_in_word:
+                bounds.append((start, len(text)))
+            return firsts, bounds
             
-        orig_firsts = get_first_letters(original)
-        corr_firsts = get_first_letters(corrected)
+        orig_firsts, orig_bounds = get_word_info(original)
+        corr_firsts, corr_bounds = get_word_info(corrected)
         
-        # Match ignoring case so we align correctly even if only case changed
+        char_in_upper_word = [False] * len(original)
+        for start, end in orig_bounds:
+            word = original[start:end]
+            if word.isupper() and (len(word) > 1 or original.isupper()):
+                for i in range(start, end):
+                    char_in_upper_word[i] = True
+                    
+        corr_to_orig = [-1] * len(corrected)
         matcher = difflib.SequenceMatcher(None, original.lower(), corrected.lower())
-        result = list(corrected)
         
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
             if tag in ('equal', 'replace'):
-                for orig_idx, corr_idx in zip(range(i1, i2), range(j1, j2)):
-                    if orig_idx in orig_firsts and corr_idx in corr_firsts:
-                        if original[orig_idx].isupper():
-                            result[corr_idx] = result[corr_idx].upper()
-                        elif original[orig_idx].islower():
-                            result[corr_idx] = result[corr_idx].lower()
+                if i2 - i1 == j2 - j1:
+                    for o, c in zip(range(i1, i2), range(j1, j2)):
+                        corr_to_orig[c] = o
+                else:
+                    for c in range(j1, j2):
+                        ratio = (c - j1) / max(1, (j2 - j1))
+                        o = i1 + int(ratio * (i2 - i1))
+                        if o >= i2: o = i2 - 1
+                        corr_to_orig[c] = o
+            elif tag == 'insert':
+                o = i1 - 1 if i1 > 0 else 0
+                for c in range(j1, j2):
+                    corr_to_orig[c] = o
+                    
+        result = list(corrected)
+        
+        for start, end in corr_bounds:
+            upper_count = 0
+            alpha_count = 0
+            first_orig_idx = -1
+            
+            for c in range(start, end):
+                if result[c].isalpha():
+                    alpha_count += 1
+                    o = corr_to_orig[c]
+                    if first_orig_idx == -1 and o != -1:
+                        first_orig_idx = o
+                    if o != -1 and char_in_upper_word[o]:
+                        upper_count += 1
                         
+            if alpha_count > 0 and upper_count >= alpha_count / 2.0:
+                # Make the entire word ALL CAPS
+                for c in range(start, end):
+                    if result[c].isalpha():
+                        result[c] = result[c].upper()
+            else:
+                # Fallback to first-letter capitalization logic
+                orig_first = -1
+                for c in range(start, end):
+                    o = corr_to_orig[c]
+                    if o != -1 and o in orig_firsts:
+                        orig_first = o
+                        break
+                
+                if orig_first == -1:
+                    orig_first = first_orig_idx
+                    
+                if orig_first != -1:
+                    c_first = -1
+                    for c in range(start, end):
+                        if result[c].isalpha():
+                            c_first = c
+                            break
+                    
+                    if c_first != -1:
+                        if original[orig_first].isupper():
+                            result[c_first] = result[c_first].upper()
+                        elif original[orig_first].islower():
+                            result[c_first] = result[c_first].lower()
+                            
         return "".join(result)
 
     def _restore_whitespace(self, original, generated):
