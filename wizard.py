@@ -84,9 +84,10 @@ def process_file_ui(file_obj, mode, highlight):
 
 # Build Gradio Interface
 with gr.Blocks(title="VietDocProof Wizard", theme=gr.themes.Soft(primary_hue="blue")) as demo:
-    gr.Markdown("# 🧙‍♂️ VietDocProof Wizard")
-    gr.Markdown("Trợ lý AI tự động đọc và sửa lỗi chính tả, lỗi dấu câu tiếng Việt cho tài liệu Word mà **không làm mất định dạng (format)** gốc.")
-    
+    gr.Markdown(
+        "<h1 style='text-align: center; margin-bottom: 10px;'>🧙‍♂️ VietDocProof Wizard</h1>\n"
+        "<p style='text-align: center; font-size: 1.1em;'>Trợ lý AI tự động đọc và sửa lỗi chính tả, lỗi dấu câu tiếng Việt cho tài liệu Word mà <b>không làm mất định dạng (format)</b> gốc.</p>"
+    )
     with gr.Row():
         # Nửa bên trái: Thao tác và Kết quả
         with gr.Column(scale=1):
@@ -120,7 +121,8 @@ with gr.Blocks(title="VietDocProof Wizard", theme=gr.themes.Soft(primary_hue="bl
                 
         # Nửa bên phải: Log Terminal
         with gr.Column(scale=1):
-            log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=25)
+            gr.Markdown("### � TIẾN TRÌNH")
+            log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=40)
             
     submit_btn.click(
         fn=process_file_ui,
