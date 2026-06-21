@@ -117,7 +117,7 @@ with gr.Blocks(title="VietDocProof Wizard", theme=gr.themes.Soft(primary_hue="bl
                 report_html = gr.File(label="Tải xuống báo cáo chi tiết (.html)")
                 
     with gr.Row():
-        log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=15)
+        log_output = gr.Code(label="Tiến trình xử lý (Terminal Logs)", language="shell", interactive=False, lines=40)
             
     submit_btn.click(
         fn=process_file_ui,
