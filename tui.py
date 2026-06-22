@@ -97,7 +97,10 @@ class VietDocProofApp(App):
                     yield RadioButton("Aggressive (Mạnh tay)", id="mode-aggressive")
                     
                 yield Label("Thử nghiệm:", classes="section-title")
-                yield Checkbox("Bật Hybrid Corrector (PhoBERT + Dictionary)", id="hybrid-check")
+                yield Checkbox("Bật Hybrid Corrector", id="hybrid-check")
+                
+                yield Label("Hệ thống:", classes="section-title")
+                yield Checkbox("Bật Log Debug (Chi tiết)", id="debug-check")
                 
                 yield Button("🚀 Bắt đầu xử lý", id="start-btn", variant="success")
                 
@@ -159,6 +162,7 @@ class VietDocProofApp(App):
         mode = modes[mode_idx] if mode_idx is not None else "safe"
         
         use_hybrid = self.query_one("#hybrid-check", Checkbox).value
+        use_debug = self.query_one("#debug-check", Checkbox).value
         
         self.query_one("#progress-bar", ProgressBar).progress = 0
         self.query_one("#log-window", RichLog).clear()
@@ -166,13 +170,18 @@ class VietDocProofApp(App):
         self.update_status("Đang tải mô hình...", "yellow")
         
         # Chạy task nền
-        self.run_processing_task(input_path, is_file, mode, use_hybrid)
+        self.run_processing_task(input_path, is_file, mode, use_hybrid, use_debug)
 
     @work(exclusive=True, thread=True)
-    def run_processing_task(self, input_path: Path, is_file: bool, mode: str, use_hybrid: bool) -> None:
+    def run_processing_task(self, input_path: Path, is_file: bool, mode: str, use_hybrid: bool, use_debug: bool) -> None:
         worker = get_current_worker()
         
         try:
+            if use_debug:
+                self.logger.setLevel(logging.DEBUG)
+                self.log_message("Đã bật chế độ Debug")
+            else:
+                self.logger.setLevel(logging.INFO)
             # Prepare config
             current_config = self.config.copy()
             current_config['engine']['mode'] = mode

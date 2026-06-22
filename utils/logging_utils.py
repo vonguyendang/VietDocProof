@@ -1,9 +1,9 @@
 import logging
 import sys
 
-def setup_logging(log_file=None):
+def setup_logging(log_file=None, level=logging.INFO):
     logger = logging.getLogger('VietDocProof')
-    logger.setLevel(logging.INFO)
+    logger.setLevel(level)
     
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     

@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--highlight-fallback", type=bool, help="Enable red text highlighting fallback (overrides config)")
     parser.add_argument("--model", type=str, help="HuggingFace model name (overrides config)")
     parser.add_argument("--experimental", action="store_true", help="Enable experimental Hybrid Corrector")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--config", type=str, default="config/default.yaml", help="Path to config file")
 
     args = parser.parse_args()
@@ -49,7 +50,9 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.mkdir(parents=True, exist_ok=True)
 
-    logger = setup_logging(report_path / "run.log")
+    import logging
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logger = setup_logging(report_path / "run.log", level=log_level)
     logger.info(f"Starting VietDocProof with config: {config}")
     
     if args.experimental:
