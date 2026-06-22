@@ -159,6 +159,10 @@ class HybridRunner:
                                 elif token.isupper():
                                     best_cand = best_cand.upper()
                                     
+                                import logging
+                                logger = logging.getLogger('VietDocProof')
+                                logger.debug(f"[HybridCorrector] Replaced '{token}' -> '{best_cand}' (Score: {best_score:.3f})")
+                                    
                                 corrected_tokens[i] = best_cand
                                 
             # Reconstruct text (rất cơ bản, có thể làm thay đổi khoảng trắng)

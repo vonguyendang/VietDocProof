@@ -163,6 +163,8 @@ def process_document(input_path, output_path, config, runner, logger=None):
                         # Apply edit
                         is_safe, reason, edit_ratio, length_delta = diff_engine.is_safe_edit_detailed(local_edit['orig_text'], local_edit['corr_text'])
                         
+                        logger.debug(f"Edit Check: '{local_edit['orig_text']}' -> '{local_edit['corr_text']}' | Safe: {is_safe} | Reason: {reason} | Edit Ratio: {edit_ratio:.2f} | Length Delta: {length_delta:.2f}")
+                        
                         if is_safe:
                             revision_writer.apply_edits(target_para, target_mapper, [local_edit])
                             categories = diff_engine.categorize_edits([local_edit])
