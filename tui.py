@@ -12,6 +12,11 @@ import logging
 from utils.logging_utils import setup_logging
 from core.document_processor import process_document
 
+import threading
+from tqdm import tqdm
+# Fix ValueError: bad value(s) in fds_to_keep in macOS inside worker threads
+tqdm.set_lock(threading.RLock())
+
 class TuiLogHandler(logging.Handler):
     def __init__(self, log_widget):
         super().__init__()
