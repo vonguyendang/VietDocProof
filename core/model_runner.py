@@ -76,6 +76,8 @@ class ModelRunner:
                 
             if stripped_text in self.cache:
                 # Restore bullet and cache
+                import logging
+                logging.getLogger('VietDocProof').debug(f"[ModelRunner] Cache HIT: '{stripped_text}' -> '{self.cache[stripped_text]}'")
                 results[i] = self._restore_whitespace(texts[i], bullet_prefix + self.cache[stripped_text])
                 continue
             else:
@@ -88,7 +90,11 @@ class ModelRunner:
         # Run inference in batches
         try:
             # Process in explicit batches since we bypassed pipeline
-            predictions = []
+            import logging
+            logger = logging.getLogger('VietDocProof')
+            import time
+            start_time = time.time()
+            
             for i in range(0, len(to_process_texts), self.batch_size):
                 batch = to_process_texts[i:i + self.batch_size]
                 inputs = self.tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=self.max_length).to(self.device)
@@ -100,6 +106,8 @@ class ModelRunner:
                 )
                 decoded = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
                 predictions.extend(decoded)
+                
+            logger.debug(f"[ModelRunner] Inference completed for {len(to_process_texts)} chunks in {time.time() - start_time:.2f}s")
             
             for idx, pred_text in zip(to_process_indices, predictions):
                 orig_text = to_process_texts[to_process_indices.index(idx)]
