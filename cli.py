@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--track-changes", type=bool, help="Enable Microsoft Word Track Changes (overrides config)")
     parser.add_argument("--highlight-fallback", type=bool, help="Enable red text highlighting fallback (overrides config)")
     parser.add_argument("--model", type=str, help="HuggingFace model name (overrides config)")
+    parser.add_argument("--experimental", action="store_true", help="Enable experimental Hybrid Corrector")
     parser.add_argument("--config", type=str, default="config/default.yaml", help="Path to config file")
 
     args = parser.parse_args()
@@ -51,7 +52,14 @@ def main():
     logger = setup_logging(report_path / "run.log")
     logger.info(f"Starting VietDocProof with config: {config}")
     
-    runner = ModelRunner(model_name=config['model']['name'], max_length=config['model']['max_length'], batch_size=config['model']['batch_size'])
+    if args.experimental:
+        from core.hybrid_runner import HybridRunner
+        runner = HybridRunner(config=config.get('hybrid', {}))
+        logger.info("Using Experimental Hybrid Runner")
+    else:
+        from core.model_runner import ModelRunner
+        runner = ModelRunner(model_name=config['model']['name'], max_length=config['model']['max_length'], batch_size=config['model']['batch_size'])
+        logger.info("Using Seq2Seq Model Runner")
     
     if input_path.is_file():
         if output_path.is_dir():

@@ -39,8 +39,19 @@ Hệ thống sẽ mở ra ở địa chỉ: `http://127.0.0.1:7860`.
 4. Bấm **Bắt đầu sửa lỗi** và theo dõi tiến trình (Terminal log ngay trên màn hình).
 5. Khi hoàn thành, file `.docx` đã sửa sẽ hiện ra để tải xuống. (Những từ được sửa có thể được bôi đỏ nếu chọn tùy chọn Highlight).
 
-### 2.2. Sử dụng Command Line (CLI)
-Dùng cho mục đích tự động hóa hoặc chạy hàng loạt.
+### 2.2. Sử dụng Terminal UI (TUI)
+Một giao diện tương tác trực tiếp trên Terminal, phù hợp cho môi trường máy chủ hoặc khi bạn không muốn mở trình duyệt web.
+
+```bash
+python3 tui.py
+```
+Giao diện TUI cung cấp:
+- **Left Panel**: Chọn tệp tin đầu vào, chọn Chế độ sửa lỗi, và nút Bật tắt Hybrid Corrector.
+- **Right Panel**: Thanh tiến trình (Progress Bar) và Terminal Logs cuộn theo thời gian thực.
+Tất cả các kết quả xử lý sẽ tự động được lưu vào thư mục `samples/output/` tương tự như giao diện Web.
+
+### 2.3. Sử dụng Command Line (CLI)
+Dùng cho mục đích tự động hóa hoặc chạy hàng loạt bằng lệnh thuần túy.
 
 ```bash
 python3 cli.py \
