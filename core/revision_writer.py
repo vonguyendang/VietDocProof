@@ -11,56 +11,81 @@ class RevisionWriter:
         Applies changes safely at the Run level.
         NEVER clears the paragraph to preserve links, bookmarks, and exact formatting.
         """
+        import copy
+        import logging
+        from docx.text.run import Run
+        from docx.shared import RGBColor
+        
+        logger = logging.getLogger('VietDocProof')
+
         if not edits:
-            return
+            return edits
 
         # Build a list of runs and their current texts
         runs = paragraph.runs
         if not runs:
-            return
+            return edits
             
         # 1. Sort edits in reverse order so length changes don't affect earlier offsets
         edits = sorted(edits, key=lambda x: x['orig_start'], reverse=True)
         
-        import copy
-        from docx.text.run import Run
+        min_processed_start = float('inf')
             
         for edit in edits:
+            # Metadata debug initialization
+            edit['applied'] = False
+            edit['skip_reason'] = None
+            edit['run_index'] = None
+            edit['is_single_run'] = None
+            
             if edit['type'] == 'equal':
+                edit['skip_reason'] = 'type_equal'
                 continue
                 
             orig_start = edit['orig_start']
             orig_end = edit['orig_end']
             corr_text = edit['corr_text']
             
+            # 4. Overlap guard
+            if orig_end > min_processed_start:
+                edit['skip_reason'] = 'overlap'
+                logger.warning(f"Overlap detected for edit '{edit['orig_text']}'. Skipping.")
+                continue
+            
             # Find which runs intersect this range
             offsets = run_mapper.get_run_offsets_for_range(orig_start, orig_end)
             if not offsets:
+                edit['skip_reason'] = 'no_mapping_found'
                 continue
                 
             sorted_run_indices = sorted(offsets.keys())
             
-            # Since we are modifying runs from right to left in a single edit that spans multiple runs,
-            # we should also process the intersected runs in reverse order.
-            sorted_run_indices.reverse()
+            # 2. Single-run Guard
+            if len(sorted_run_indices) > 1:
+                edit['is_single_run'] = False
+                edit['skip_reason'] = 'multi_run_edit_not_supported_yet'
+                logger.warning(f"Skipping multi-run edit: '{edit['orig_text']}' spans {len(sorted_run_indices)} runs.")
+                continue
+                
+            edit['is_single_run'] = True
+            r_idx = sorted_run_indices[0]
+            edit['run_index'] = r_idx
             
-            for i, r_idx in enumerate(sorted_run_indices):
-                run = runs[r_idx]
-                start_off, end_off = offsets[r_idx]
+            run = runs[r_idx]
+            start_off, end_off = offsets[r_idx]
+            
+            text_before = run.text[:start_off]
+            text_after = run.text[end_off:]
+            
+            # 5. XML manipulation with Try/Except
+            try:
+                # Backup old text
+                old_text = run.text
                 
-                text_before = run.text[:start_off]
-                text_after = run.text[end_off:]
-                
-                # If this is the FIRST run in logical order, we insert corr_text here.
-                # Since we reversed sorted_run_indices, the first logical run is the LAST in our loop.
-                is_first_logical_run = (i == len(sorted_run_indices) - 1)
-                
-                # Update original run to text_before
                 run.text = text_before
-                
                 last_inserted_element = run._r
                 
-                if is_first_logical_run and corr_text:
+                if corr_text:
                     new_r_corr = copy.deepcopy(run._r)
                     last_inserted_element.addnext(new_r_corr)
                     new_run_corr = Run(new_r_corr, run._parent)
@@ -74,3 +99,14 @@ class RevisionWriter:
                     last_inserted_element.addnext(new_r_after)
                     new_run_after = Run(new_r_after, run._parent)
                     new_run_after.text = text_after
+                    
+                # Update min_processed_start
+                min_processed_start = orig_start
+                edit['applied'] = True
+                
+            except Exception as e:
+                run.text = old_text
+                edit['skip_reason'] = 'xml_manipulation_failed'
+                logger.error(f"XML manipulation failed for edit '{edit['orig_text']}': {e}")
+                
+        return edits

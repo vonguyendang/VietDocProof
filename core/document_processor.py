@@ -167,10 +167,16 @@ def process_document(input_path, output_path, config, runner, logger=None):
                         
                         if is_safe:
                             revision_writer.apply_edits(target_para, target_mapper, [local_edit])
-                            categories = diff_engine.categorize_edits([local_edit])
-                            stats.add_change('apply', len(local_edit['orig_text'].split()), categories)
                             
-                            review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Applied", "safe_edit", edit_ratio, length_delta)
+                            if local_edit.get('applied'):
+                                categories = diff_engine.categorize_edits([local_edit])
+                                stats.add_change('apply', len(local_edit['orig_text'].split()), categories)
+                                review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Applied", "safe_edit", edit_ratio, length_delta)
+                            else:
+                                skip_reason = local_edit.get('skip_reason', 'unknown')
+                                review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Skipped", f"writer_{skip_reason}", edit_ratio, length_delta)
+                                logger.warning(f"Edit skipped during XML write: {skip_reason} ('{local_edit['orig_text']}')")
+                                continue
                             
                             md_str = ""
                             if local_edit['type'] == 'replace':
