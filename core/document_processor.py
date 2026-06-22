@@ -1,5 +1,6 @@
 from pathlib import Path
 from tqdm import tqdm
+
 from core.docx_reader import DocxReader
 from core.text_segmenter import TextSegmenter
 from core.diff_engine import DiffEngine
@@ -7,6 +8,9 @@ from core.confidence import ConfidenceScorer
 from core.revision_writer import RevisionWriter
 from core.stats import StatsTracker
 from core.reporter import Reporter
+from core.normalizer import TextNormalizer
+from core.entity_protector import EntityProtector
+from core.paragraph_merger import ParagraphMerger
 from utils.logging_utils import setup_logging
 
 def process_document(input_path, output_path, config, runner, logger=None):
@@ -17,7 +21,7 @@ def process_document(input_path, output_path, config, runner, logger=None):
     
     reader = DocxReader(input_path)
     segmenter = TextSegmenter(max_length=config['model'].get('max_length', 256))
-    diff_engine = DiffEngine()
+    diff_engine = DiffEngine(config.get('diff_engine', None))
     scorer = ConfidenceScorer(config['confidence'])
     revision_writer = RevisionWriter(
         mode=config['engine']['mode'], 
@@ -26,105 +30,174 @@ def process_document(input_path, output_path, config, runner, logger=None):
     )
     stats = StatsTracker()
     reporter = Reporter(output_path.parent)
+    protector = EntityProtector()
     
-    yield f"🚀 Bắt đầu quét và phân tích file: {input_path.name}..."
+    mode = config['engine'].get('merge_mode', 'soft-merge')
+    
+    from core.review_tracker import ReviewTracker
+    review_tracker = ReviewTracker(output_path.parent)
+    document_id = input_path.name
+    
+    yield f"🚀 Bắt đầu quét và phân tích file: {input_path.name} (Mode: {mode})..."
     
     paragraphs_to_process = list(reader.extract_paragraphs())
     
-    import re
+    buffer_data = []
+    
     for idx, section_name, para, mapper in tqdm(paragraphs_to_process, desc="Scanning Paragraphs"):
-        stats.add_paragraph()
-        text = mapper.text
-        if not text.strip(): continue
+        buffer_data.append((idx, section_name, para, mapper))
         
-        # Auto clean up double spaces (replace 2 or more spaces with 1 space)
-        text = re.sub(r' {2,}', ' ', text)
-        
-        chunks = segmenter.segment(text)
-        chunk_texts = [c[0] for c in chunks]
-        
-        if not chunk_texts: continue
-            
-        corrected_chunks = runner.correct_batch(chunk_texts)
-        
-        corr_para_text = text
-        offset_shift = 0
-        for chunk_idx, (orig_chunk, start_idx, end_idx) in enumerate(chunks):
-            stats.add_sentence(len(orig_chunk.split()))
-            corr_chunk = corrected_chunks[chunk_idx]
-            
-            # Normalize unicode to avoid flagging identical-looking text (e.g. decomposed vs precomposed)
-            import unicodedata
-            orig_norm = unicodedata.normalize('NFC', orig_chunk)
-            corr_norm = unicodedata.normalize('NFC', corr_chunk)
-            
-            if orig_norm != corr_norm:
-                edits = diff_engine.diff(orig_norm, corr_norm)
-                categories = diff_engine.categorize_edits(edits)
-                score = scorer.score(orig_chunk, corr_chunk, edits, categories)
-                action = scorer.get_action_status(score, mode=config['engine']['mode'])
+        # Decide if we should merge with next
+        should_merge = False
+        if idx < len(paragraphs_to_process) - 1 and mode in ['soft-merge', 'hard-merge']:
+            next_idx, next_section, next_para, next_mapper = paragraphs_to_process[idx + 1]
+            prev_style = para.style.name if para.style else ""
+            next_style = next_para.style.name if next_para.style else ""
+            if ParagraphMerger.should_merge(para.text, next_para.text, prev_style, next_style):
+                should_merge = True
                 
-                stats.add_change(action, len(orig_chunk.split()), categories)
-                record = {
-                        "file_name": Path(input_path).name,
-                        "section_name": section_name,
-                        "paragraph_index": idx,
-                        "original_text": orig_chunk,
-                        "corrected_text": corr_chunk,
-                        "error_type": ", ".join(categories),
-                        "confidence": score,
-                        "action_status": action,
-                        "changed_word_count": len(orig_chunk.split()) if action == 'apply' else 0
-                }
-                reporter.add_record(record)
+        if not should_merge:
+            # Process buffer
+            if not buffer_data:
+                continue
                 
-                if action == 'apply':
-                    ansi_str = ""
-                    md_str = ""
-                    for e in edits:
-                        if e['type'] == 'equal':
-                            ansi_str += e['corr_text']
-                            md_str += e['corr_text']
-                        elif e['type'] == 'replace':
-                            ansi_str += f"\033[9m\033[91m{e['orig_text']}\033[0m \033[1m\033[91m{e['corr_text']}\033[0m"
-                            md_str += f"~~{e['orig_text']}~~ **{e['corr_text']}**"
-                        elif e['type'] == 'delete':
-                            ansi_str += f"\033[9m\033[91m{e['orig_text']}\033[0m"
-                            md_str += f"~~{e['orig_text']}~~"
-                        elif e['type'] == 'insert':
-                            ansi_str += f"\033[1m\033[91m{e['corr_text']}\033[0m"
-                            md_str += f"**{e['corr_text']}**"
-                            
-                    import sys
-                    tqdm.write(f"🔄 Đã sửa: {orig_chunk}  -->  {ansi_str}")
-                    sys.stdout.flush()
-                    yield f"🔄 Đã sửa: {md_str}"
-                    
+            # 1. Build Logical Text
+            logical_text = "\n".join([d[2].text for d in buffer_data])
+            
+            if not logical_text.strip():
+                buffer_data = []
+                continue
+                
+            stats.add_paragraph() # Count as 1 logical block
+            para_id = f"para_{buffer_data[0][0]}"
+            
+            # 2. Normalize
+            norm_text = TextNormalizer.normalize_all(logical_text)
+            
+            # 3. Protect Entities
+            protected_text, entity_map = protector.protect(norm_text)
+            
+            # 4. Segment and Correct
+            chunks = segmenter.segment(protected_text)
+            chunk_texts = [c[0] for c in chunks]
+            
+            if chunk_texts:
+                corrected_chunks = runner.correct_batch(chunk_texts)
+                
+                # Reconstruct corrected protected text
+                corr_protected_text = protected_text
+                offset_shift = 0
+                for chunk_idx, (orig_chunk, start_idx, end_idx) in enumerate(chunks):
+                    stats.add_sentence(len(orig_chunk.split()))
+                    corr_chunk = corrected_chunks[chunk_idx]
                     real_start = start_idx + offset_shift
                     real_end = end_idx + offset_shift
-                    corr_para_text = corr_para_text[:real_start] + corr_chunk + corr_para_text[real_end:]
+                    corr_protected_text = corr_protected_text[:real_start] + corr_chunk + corr_protected_text[real_end:]
                     offset_shift += len(corr_chunk) - len(orig_chunk)
                     
-        if corr_para_text != text:
-            para_edits = diff_engine.diff(text, corr_para_text)
-            revision_writer.apply_edits(para, mapper, para_edits)
+                # 5. Unprotect Entities
+                corr_norm_text = protector.unprotect(corr_protected_text, entity_map)
+                
+                # 6. Diff & Apply
+                import unicodedata
+                logical_norm = unicodedata.normalize('NFC', logical_text)
+                corr_norm = unicodedata.normalize('NFC', corr_norm_text)
+                
+                if logical_norm != corr_norm:
+                    edits = diff_engine.diff(logical_norm, corr_norm)
+                    
+                    # Map edits to physical paragraphs
+                    para_boundaries = []
+                    curr_offset = 0
+                    for d in buffer_data:
+                        length = len(d[2].text)
+                        para_boundaries.append((curr_offset, curr_offset + length, d))
+                        curr_offset += length + 1 # +1 for \n
+                        
+                    for edit in edits:
+                        if edit['type'] == 'equal':
+                            continue
+                            
+                        orig_start = edit['orig_start']
+                        orig_end = edit['orig_end']
+                        
+                        # Find which paragraph it belongs to
+                        intersecting_paras = []
+                        for start_bound, end_bound, d in para_boundaries:
+                            if orig_start < end_bound and orig_end > start_bound:
+                                intersecting_paras.append((start_bound, end_bound, d))
+                                
+                        if not intersecting_paras:
+                            continue
+                            
+                        if len(intersecting_paras) > 1:
+                            if mode == 'hard-merge':
+                                # Allow cross-paragraph edits in hard-merge
+                                pass
+                            else:
+                                # Soft-merge: Reject destructive cross-boundary edit
+                                record = {
+                                    "file_name": Path(input_path).name,
+                                    "section_name": buffer_data[0][1],
+                                    "paragraph_index": buffer_data[0][0],
+                                    "original_text": edit['orig_text'],
+                                    "corrected_text": edit['corr_text'],
+                                    "error_type": "rejected_destructive_merge",
+                                    "confidence": 0,
+                                    "action_status": "reject",
+                                    "changed_word_count": 0
+                                }
+                                reporter.add_record(record)
+                                review_tracker.add_edit(document_id, para_id, edit['orig_text'], edit['corr_text'], "Rejected", "destructive_merge")
+                                continue
+                                
+                        # It's safe to apply to the single intersecting paragraph
+                        start_bound, end_bound, target_d = intersecting_paras[0]
+                        local_edit = edit.copy()
+                        local_edit['orig_start'] = max(0, orig_start - start_bound)
+                        local_edit['orig_end'] = min(end_bound - start_bound, orig_end - start_bound)
+                        
+                        target_para = target_d[2]
+                        target_mapper = target_d[3]
+                        
+                        # Apply edit
+                        is_safe, reason, edit_ratio, length_delta = diff_engine.is_safe_edit_detailed(local_edit['orig_text'], local_edit['corr_text'])
+                        
+                        if is_safe:
+                            revision_writer.apply_edits(target_para, target_mapper, [local_edit])
+                            categories = diff_engine.categorize_edits([local_edit])
+                            stats.add_change('apply', len(local_edit['orig_text'].split()), categories)
+                            
+                            review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Applied", "safe_edit", edit_ratio, length_delta)
+                            
+                            md_str = ""
+                            if local_edit['type'] == 'replace':
+                                md_str = f"~~{local_edit['orig_text']}~~ **{local_edit['corr_text']}**"
+                            elif local_edit['type'] == 'insert':
+                                md_str = f"**{local_edit['corr_text']}**"
+                            elif local_edit['type'] == 'delete':
+                                md_str = f"~~{local_edit['orig_text']}~~"
+                                
+                            yield f"🔄 Đã sửa: {md_str}"
+                        else:
+                            # Rejected unsafe edit
+                            stats.add_change('reject_unsafe', len(local_edit['orig_text'].split()), ['unsafe_edit'])
+                            review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Rejected", reason, edit_ratio, length_delta)
+                            yield f"❌ Bỏ qua sửa đổi nguy hiểm ({reason}): ~~{local_edit['orig_text']}~~ -> **{local_edit['corr_text']}**"
+                            
+            buffer_data = []
             
-        # Save cache periodically to allow resuming
-        if idx > 0 and idx % 20 == 0:
-            runner.save_cache()
-            
+            # Save cache periodically to allow resuming
+            if idx > 0 and idx % 20 == 0:
+                runner.save_cache()
+                
     # Save cache at the end
     runner.save_cache()
             
-    # Clean up excessive empty paragraphs (double Enters)
-    removed_empty_lines = reader.clean_empty_paragraphs()
-    if removed_empty_lines > 0:
-        logger.info(f"Removed {removed_empty_lines} consecutive empty paragraphs.")
-        yield f"🧹 Tự động dọn dẹp {removed_empty_lines} dòng Enter trắng thừa thãi."
-
     # Save the output
     reader.save(output_path)
     
-    # Save reports
+    # Save reports and review data
     reporter.generate_reports(stats.get_summary())
+    review_tracker.save()
     logger.info(f"Finished processing. Saved output to {output_path}")

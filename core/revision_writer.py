@@ -1,5 +1,4 @@
 from docx.shared import RGBColor
-from core.run_preserver import RunPreserver
 
 class RevisionWriter:
     def __init__(self, mode="safe", track_changes=False, highlight_fallback=True):
@@ -9,58 +8,50 @@ class RevisionWriter:
 
     def apply_edits(self, paragraph, run_mapper, edits):
         """
-        Applies changes to the paragraph while attempting to preserve formatting.
-        In Phase 1, we use red text highlighting as a fallback for track changes.
+        Applies changes safely at the Run level.
+        NEVER clears the paragraph to preserve links, bookmarks, and exact formatting.
         """
-        original_runs_data = []
-        for r in paragraph.runs:
-            original_runs_data.append({
-                'run': r,
-                'text': r.text
-            })
+        if not edits:
+            return
+
+        # Build a list of runs and their current texts
+        runs = paragraph.runs
+        if not runs:
+            return
             
-        new_run_specs = [] 
-        
         for edit in edits:
-            op = edit['type']
+            if edit['type'] == 'equal':
+                continue
+                
             orig_start = edit['orig_start']
             orig_end = edit['orig_end']
+            corr_text = edit['corr_text']
             
+            # Find which runs intersect this range
             offsets = run_mapper.get_run_offsets_for_range(orig_start, orig_end)
+            if not offsets:
+                continue
+                
+            # To apply a replacement across potentially multiple runs without breaking formatting:
+            # We put the entirely new corrected text into the FIRST intersecting run,
+            # and delete the corresponding text segments from all other intersecting runs.
             
-            if op == 'equal':
-                for run_idx, (start_off, end_off) in offsets.items():
-                    sub_text = original_runs_data[run_idx]['text'][start_off:end_off]
-                    new_run_specs.append({'text': sub_text, 'source_run_idx': run_idx, 'is_change': False})
-            elif op == 'replace' or op == 'insert':
-                if offsets:
-                    source_run_idx = sorted(offsets.keys())[0]
+            sorted_run_indices = sorted(offsets.keys())
+            first_run_idx = sorted_run_indices[0]
+            
+            for i, r_idx in enumerate(sorted_run_indices):
+                run = runs[r_idx]
+                start_off, end_off = offsets[r_idx]
+                
+                # Extract parts of the run text that are OUTSIDE the replaced range
+                text_before = run.text[:start_off]
+                text_after = run.text[end_off:]
+                
+                if i == 0:
+                    # The first run takes the new text
+                    run.text = text_before + corr_text + text_after
+                    if self.highlight_fallback and corr_text.strip():
+                        run.font.color.rgb = RGBColor(255, 0, 0)
                 else:
-                    if orig_start == 0 and original_runs_data:
-                        source_run_idx = 0
-                    elif original_runs_data:
-                        source_run_idx = len(original_runs_data) - 1
-                    else:
-                        source_run_idx = -1
-                
-                new_run_specs.append({'text': edit['corr_text'], 'source_run_idx': source_run_idx, 'is_change': True})
-            elif op == 'delete':
-                pass
-                
-        # Store original run references
-        original_runs_cache = [r for r in paragraph.runs]
-            
-        # Clear paragraph
-        paragraph.clear()
-        
-        # Append new runs
-        for spec in new_run_specs:
-            if not spec['text']: continue
-            
-            run = paragraph.add_run(spec['text'])
-            if spec['source_run_idx'] != -1 and spec['source_run_idx'] < len(original_runs_cache):
-                source_r = original_runs_cache[spec['source_run_idx']]
-                RunPreserver.clone_run_format(source_r, run)
-                
-            if spec['is_change'] and self.highlight_fallback:
-                run.font.color.rgb = RGBColor(255, 0, 0)
+                    # Subsequent runs just get their replaced portion removed
+                    run.text = text_before + text_after

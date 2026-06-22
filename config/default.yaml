@@ -12,3 +12,34 @@ engine:
   mode: "safe" # safe, review, aggressive
   track_changes: false
   highlight_fallback: true
+  merge_mode: "soft-merge"
+  
+diff_engine:
+  edit_ratio: 0.20
+  length_delta_ratio: 0.30
+  user_lexicon:
+    - VietinBank
+    - LPBank
+    - InfinityFree
+    - Google
+    - Apple
+    - Android
+    - PayPal
+    - OpenAI
+    - Cần Thơ
+    - Ninh Kiều
+
+hybrid:
+  use_hybrid: false
+  confidence_threshold: 0.85
+  user_lexicon:
+    - VietinBank
+    - LPBank
+    - InfinityFree
+    - Google
+    - Apple
+    - Android
+    - PayPal
+    - OpenAI
+    - Cần Thơ
+    - Ninh Kiều

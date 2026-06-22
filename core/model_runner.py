@@ -92,7 +92,12 @@ class ModelRunner:
             for i in range(0, len(to_process_texts), self.batch_size):
                 batch = to_process_texts[i:i + self.batch_size]
                 inputs = self.tokenizer(batch, return_tensors="pt", padding=True, truncation=True, max_length=self.max_length).to(self.device)
-                outputs = self.model.generate(**inputs, max_new_tokens=self.max_length, num_beams=1)
+                outputs = self.model.generate(
+                    **inputs, 
+                    max_new_tokens=self.max_length, 
+                    num_beams=2,
+                    repetition_penalty=1.05
+                )
                 decoded = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
                 predictions.extend(decoded)
             
