@@ -114,6 +114,8 @@ def process_document(input_path, output_path, config, runner, logger=None):
                         para_boundaries.append((curr_offset, curr_offset + length, d))
                         curr_offset += length + 1 # +1 for \n
                         
+                    safe_edits_by_para = {}
+                    
                     for edit in edits:
                         if edit['type'] == 'equal':
                             continue
@@ -148,6 +150,7 @@ def process_document(input_path, output_path, config, runner, logger=None):
                                     "changed_word_count": 0
                                 }
                                 reporter.add_record(record)
+                                para_id = intersecting_paras[0][2][0]
                                 review_tracker.add_edit(document_id, para_id, edit['orig_text'], edit['corr_text'], "Rejected", "destructive_merge")
                                 continue
                                 
@@ -159,6 +162,7 @@ def process_document(input_path, output_path, config, runner, logger=None):
                         
                         target_para = target_d[2]
                         target_mapper = target_d[3]
+                        para_id = target_d[0]
                         
                         # Apply edit
                         is_safe, reason, edit_ratio, length_delta = diff_engine.is_safe_edit_detailed(local_edit['orig_text'], local_edit['corr_text'])
@@ -166,32 +170,52 @@ def process_document(input_path, output_path, config, runner, logger=None):
                         logger.debug(f"Edit Check: '{local_edit['orig_text']}' -> '{local_edit['corr_text']}' | Safe: {is_safe} | Reason: {reason} | Edit Ratio: {edit_ratio:.2f} | Length Delta: {length_delta:.2f}")
                         
                         if is_safe:
-                            revision_writer.apply_edits(target_para, target_mapper, [local_edit])
-                            
-                            if local_edit.get('applied'):
-                                categories = diff_engine.categorize_edits([local_edit])
-                                stats.add_change('apply', len(local_edit['orig_text'].split()), categories)
-                                review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Applied", "safe_edit", edit_ratio, length_delta)
-                            else:
-                                skip_reason = local_edit.get('skip_reason', 'unknown')
-                                review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Skipped", f"writer_{skip_reason}", edit_ratio, length_delta)
-                                logger.warning(f"Edit skipped during XML write: {skip_reason} ('{local_edit['orig_text']}')")
-                                continue
-                            
-                            md_str = ""
-                            if local_edit['type'] == 'replace':
-                                md_str = f"~~{local_edit['orig_text']}~~ **{local_edit['corr_text']}**"
-                            elif local_edit['type'] == 'insert':
-                                md_str = f"**{local_edit['corr_text']}**"
-                            elif local_edit['type'] == 'delete':
-                                md_str = f"~~{local_edit['orig_text']}~~"
-                                
-                            yield f"🔄 Đã sửa: {md_str}"
+                            if para_id not in safe_edits_by_para:
+                                safe_edits_by_para[para_id] = {
+                                    "para": target_para,
+                                    "mapper": target_mapper,
+                                    "edits": []
+                                }
+                            local_edit['_edit_ratio'] = edit_ratio
+                            local_edit['_length_delta'] = length_delta
+                            safe_edits_by_para[para_id]["edits"].append(local_edit)
                         else:
                             # Rejected unsafe edit
                             stats.add_change('reject_unsafe', len(local_edit['orig_text'].split()), ['unsafe_edit'])
                             review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Rejected", reason, edit_ratio, length_delta)
                             yield f"❌ Bỏ qua sửa đổi nguy hiểm ({reason}): ~~{local_edit['orig_text']}~~ -> **{local_edit['corr_text']}**"
+
+                    # Now apply all safe edits per paragraph at once to preserve run mapping properly
+                    for para_id, p_data in safe_edits_by_para.items():
+                        target_para = p_data["para"]
+                        target_mapper = p_data["mapper"]
+                        para_edits = p_data["edits"]
+                        
+                        revision_writer.apply_edits(target_para, target_mapper, para_edits)
+                        
+                        for local_edit in para_edits:
+                            edit_ratio = local_edit['_edit_ratio']
+                            length_delta = local_edit['_length_delta']
+                            
+                            if local_edit.get('applied'):
+                                categories = diff_engine.categorize_edits([local_edit])
+                                stats.add_change('apply', len(local_edit['orig_text'].split()), categories)
+                                review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Applied", "safe_edit", edit_ratio, length_delta)
+                                
+                                md_str = ""
+                                if local_edit['type'] == 'replace':
+                                    md_str = f"~~{local_edit['orig_text']}~~ **{local_edit['corr_text']}**"
+                                elif local_edit['type'] == 'insert':
+                                    md_str = f"**{local_edit['corr_text']}**"
+                                elif local_edit['type'] == 'delete':
+                                    md_str = f"~~{local_edit['orig_text']}~~"
+                                    
+                                yield f"🔄 Đã sửa: {md_str}"
+                            else:
+                                skip_reason = local_edit.get('skip_reason', 'unknown')
+                                review_tracker.add_edit(document_id, para_id, local_edit['orig_text'], local_edit['corr_text'], "Skipped", f"writer_{skip_reason}", edit_ratio, length_delta)
+                                logger.warning(f"Edit skipped during XML write: {skip_reason} ('{local_edit['orig_text']}')")
+                                yield f"⚠️ Bỏ qua (XML {skip_reason}): ~~{local_edit['orig_text']}~~ -> **{local_edit['corr_text']}**"
                             
             buffer_data = []
             
